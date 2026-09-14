@@ -45,6 +45,9 @@ import {
 import type { RuntimeOutputProfile } from "../../template/runtime/workerProtocol";
 import { useRuntimeSettings } from "../settings/runtimeSettings";
 import { useUnsavedChangesGuard } from "../../unsavedChangesGuard";
+import { GenerationSessionPool } from "../../template/runtime/GenerationSessionPool";
+import { mapConcurrency } from "../../utils/mapConcurrency";
+import { throttleProgressUpdates } from "../../utils/throttleProgressUpdates";
 
 const acceptTypes = [
   "image/jpeg",
@@ -470,8 +473,24 @@ export function StartWorkflow() {
   const previewUrlRef = useRef("");
   const previewAbortControllerRef = useRef<AbortController | null>(null);
   const previewRuntimeSessionRef = useRef<TemplateRuntimeSession | null>(null);
-  const evaluationSessionRef = useRef<TemplateRuntimeSession | null>(null);
+  const evaluationSessionsRef = useRef<Map<string, TemplateRuntimeSession>>(new Map());
   const evaluateRequestIdRef = useRef(0);
+  const previewProgressThrottlerRef = useRef<ReturnType<typeof throttleProgressUpdates> | null>(
+    null,
+  );
+  const generateProgressThrottlerRef = useRef<ReturnType<typeof throttleProgressUpdates> | null>(
+    null,
+  );
+  const generateLatestProgressRef = useRef<{
+    overall: number;
+    normalized: number;
+    fileName: string;
+  } | null>(null);
+  const previewLatestProgressRef = useRef<{
+    clamped: number;
+    phaseLabel: string;
+    fileName: string;
+  } | null>(null);
   const { settings } = useRuntimeSettings();
   const { setNavigationBlocked, setHasUnsavedChanges } = useUnsavedChangesGuard();
   const [files, setFiles] = useState<File[]>([]);
@@ -605,10 +624,6 @@ export function StartWorkflow() {
   const hasActiveOverride =
     activeConfigTarget !== "global" && Boolean(fileTemplateOverrides[activeConfigTarget]);
   const webCodecsSupported = checkWebCodecsSupport();
-  const activeFileSupported = currentFile
-    ? fileCodecSupportMap[getFileCacheKey(currentFile)]
-    : true;
-  const showUnsupportedCodecWarning = Boolean(currentFile && activeFileSupported === false);
   const showUnsupportedWebCodecsWarning = Boolean(
     currentFile && currentFile.type.startsWith("video/") && !webCodecsSupported,
   );
@@ -783,11 +798,22 @@ export function StartWorkflow() {
 
   function updatePreviewProgress(percent: number) {
     const clamped = Math.max(0, Math.min(100, Math.round(percent)));
-    setPreviewProgress(clamped);
     const fileName = previewActiveFileRef.current || currentFile?.name || "当前文件";
     const isVideo = (currentFile?.type ?? "").startsWith("video/");
     const phaseLabel = isVideo ? "帧处理中" : "处理中";
-    setPreviewProgressMessage(`正在${phaseLabel} ${fileName} (${clamped}%)`);
+    previewLatestProgressRef.current = { clamped, phaseLabel, fileName };
+
+    if (!previewProgressThrottlerRef.current) {
+      previewProgressThrottlerRef.current = throttleProgressUpdates(() => {
+        const latest = previewLatestProgressRef.current;
+        if (!latest) return;
+        setPreviewProgress(latest.clamped);
+        setPreviewProgressMessage(
+          `正在${latest.phaseLabel} ${latest.fileName} (${latest.clamped}%)`,
+        );
+      });
+    }
+    previewProgressThrottlerRef.current.push(clamped);
   }
 
   function cleanupPreviewUrl(targetUrl?: string) {
@@ -944,19 +970,19 @@ export function StartWorkflow() {
   }
 
   async function disposeEvaluationSession() {
-    const session = evaluationSessionRef.current;
-    evaluationSessionRef.current = null;
-    if (session) {
-      await session.dispose();
-    }
+    const sessions = evaluationSessionsRef.current;
+    evaluationSessionsRef.current = new Map();
+    await Promise.allSettled(Array.from(sessions.values()).map((session) => session.dispose()));
   }
 
   async function ensureEvaluationSession(
     template: WatermarkTemplate,
     workspaceFiles: Record<string, string>,
   ) {
-    if (evaluationSessionRef.current) {
-      return evaluationSessionRef.current;
+    const cache = evaluationSessionsRef.current;
+    const cached = cache.get(template.id);
+    if (cached) {
+      return cached;
     }
 
     const evaluationSession = createTemplateRuntimeSession({
@@ -976,7 +1002,7 @@ export function StartWorkflow() {
       throw new Error(initialized.error ?? `模板 ${template.name} 初始化失败`);
     }
 
-    evaluationSessionRef.current = evaluationSession;
+    cache.set(template.id, evaluationSession);
     return evaluationSession;
   }
 
@@ -1076,7 +1102,7 @@ export function StartWorkflow() {
       throw new Error(evaluated.error ?? "模板参数评估失败");
     }
 
-    evaluationSessionRef.current = session;
+    evaluationSessionsRef.current.set(template.id, session);
     setEvaluatedFields(evaluated.configFields);
     setNormalizedParams(evaluated.normalizedConfig);
     setParams(toEditableParams(evaluated.normalizedConfig));
@@ -1286,6 +1312,8 @@ export function StartWorkflow() {
       cleanupPreviewUrl();
       void cancelActivePreview();
       void disposeEvaluationSession();
+      previewProgressThrottlerRef.current?.cancel();
+      generateProgressThrottlerRef.current?.cancel();
     };
   }, []);
 
@@ -1392,9 +1420,8 @@ export function StartWorkflow() {
   }, [selectedTemplateId]);
 
   useEffect(() => {
-    if (!selectedTemplateId) return;
     void disposeEvaluationSession();
-  }, [selectedTemplateId, runtimeMode]);
+  }, [runtimeMode]);
 
   useEffect(() => {
     if (!previewLoading) return;
@@ -1602,9 +1629,26 @@ export function StartWorkflow() {
             Math.round(((fileIndex + normalized / 100) / Math.max(1, files.length)) * 100),
           ),
         );
-        setProgress(overall);
-        setProgressMessage(`总进度 ${overall}% | 处理中: ${fileName} (${normalized}%)`);
+        if (!generateProgressThrottlerRef.current) {
+          generateProgressThrottlerRef.current = throttleProgressUpdates(() => {
+            const latest = generateLatestProgressRef.current;
+            if (!latest) return;
+            setProgress(latest.overall);
+            setProgressMessage(
+              `总进度 ${latest.overall}% | 处理中: ${latest.fileName} (${latest.normalized}%)`,
+            );
+          });
+        }
+        generateLatestProgressRef.current = { overall, normalized, fileName };
+        generateProgressThrottlerRef.current.push(0);
       };
+
+      const tasks: Array<{
+        file: File;
+        fileIndex: number;
+        template: WatermarkTemplate;
+        snapshot: TemplateConfigSnapshot;
+      }> = [];
 
       for (let fileIndex = 0; fileIndex < files.length; fileIndex += 1) {
         const file = files[fileIndex];
@@ -1616,34 +1660,32 @@ export function StartWorkflow() {
           setFileProgress(fileIndex, 100, file.name);
           continue;
         }
+        tasks.push({
+          file,
+          fileIndex,
+          template: fileTemplate,
+          snapshot: fileSnapshot,
+        });
+      }
 
+      const poolByTemplate = new Map<string, GenerationSessionPool>();
+
+      const disposePools = async () => {
+        await Promise.allSettled(Array.from(poolByTemplate.values()).map((pool) => pool.dispose()));
+        poolByTemplate.clear();
+      };
+
+      const results = await mapConcurrency(tasks, settings.maxConcurrency, async (task) => {
+        const { file, fileIndex, template, snapshot } = task;
         try {
-          const workspaceFiles = await resolveWorkspaceFiles(fileTemplate);
+          const workspaceFiles = await resolveWorkspaceFiles(template);
 
-          let normalizedConfig: Record<string, unknown> = fileSnapshot.params;
+          let normalizedConfig: Record<string, unknown> = snapshot.params;
           if (!workspaceFiles) {
-            normalizedConfig = fileSnapshot.params;
+            normalizedConfig = snapshot.params;
           } else {
-            const evaluateSession = createTemplateRuntimeSession({
-              mode: runtimeMode,
-              files: workspaceFiles,
-              entry: "index.ts",
-              logger: {
-                info: () => undefined,
-                error: (...args: unknown[]) =>
-                  console.error("[template-runtime][evaluate]", ...args),
-              },
-              logPrefix: "template-main-thread-evaluate",
-            });
-
-            const initialized = await evaluateSession.initialize();
-            if (!initialized.ok) {
-              await evaluateSession.dispose();
-              throw new Error(initialized.error ?? "模板初始化失败");
-            }
-
-            const evaluated = await evaluateSession.evaluate(fileSnapshot.params);
-            await evaluateSession.dispose();
+            const session = await ensureEvaluationSession(template, workspaceFiles);
+            const evaluated = await session.evaluate(snapshot.params);
             if (!evaluated.ok) {
               throw new Error(evaluated.error ?? "模板参数评估失败");
             }
@@ -1654,7 +1696,7 @@ export function StartWorkflow() {
             const simulated = await simulateGenerate(
               {
                 files: [file],
-                template: fileTemplate,
+                template,
                 params: toEditableParams(normalizedConfig),
                 templateWorkspaceFiles: undefined,
               },
@@ -1667,33 +1709,33 @@ export function StartWorkflow() {
             if (!generated) {
               throw new Error("生成结果为空");
             }
-            generatedAssets.push(generated);
             setFileProgress(fileIndex, 100, file.name);
-            continue;
+            return generated;
           }
 
-          const runSession = createTemplateRuntimeSession({
-            mode: runtimeMode,
-            files: workspaceFiles,
-            entry: "index.ts",
-            logger: {
-              info: () => undefined,
-              error: (...args: unknown[]) => console.error("[template-runtime][generate]", ...args),
-              progress: (percent: number) => {
-                setFileProgress(fileIndex, percent, file.name);
+          let pool = poolByTemplate.get(template.id);
+          if (!pool) {
+            pool = new GenerationSessionPool({
+              mode: runtimeMode,
+              files: workspaceFiles,
+              entry: "index.ts",
+              logger: {
+                info: () => undefined,
+                error: (...args: unknown[]) =>
+                  console.error("[template-runtime][generate]", ...args),
+                progress: (percent: number) => {
+                  setFileProgress(fileIndex, percent, file.name);
+                },
               },
-            },
-            logPrefix: "template-main-thread",
-          });
-
-          const initialized = await runSession.initialize();
-          if (!initialized.ok) {
-            await runSession.dispose();
-            throw new Error(initialized.error ?? "模板初始化失败");
+              maxConcurrency: settings.maxConcurrency,
+            });
+            poolByTemplate.set(template.id, pool);
           }
 
-          const runtimeResult = await runSession.run(normalizedConfig, file);
-          await runSession.dispose();
+          const runtimeResult = await pool.run({
+            config: normalizedConfig,
+            mediaFile: file,
+          });
           if (!runtimeResult.ok) {
             throw new Error(runtimeResult.error ?? `文件 ${file.name} 生成失败`);
           }
@@ -1702,11 +1744,11 @@ export function StartWorkflow() {
             runtimeResult.value instanceof Blob
               ? runtimeResult.value
               : new Blob([], { type: file.type || "image/png" });
-          generatedAssets.push({
+          setFileProgress(fileIndex, 100, file.name);
+          return {
             name: buildAssetName(file, blob, fileIndex),
             blob,
-          });
-          setFileProgress(fileIndex, 100, file.name);
+          };
         } catch (fileError) {
           const reason = fileError instanceof Error ? fileError.message : "未知错误";
           failedItems.push({ name: file.name, reason });
@@ -1715,6 +1757,15 @@ export function StartWorkflow() {
             error: fileError,
           });
           setFileProgress(fileIndex, 100, file.name);
+          return null;
+        }
+      });
+
+      await disposePools();
+
+      for (const result of results) {
+        if (result) {
+          generatedAssets.push(result);
         }
       }
 
@@ -2816,16 +2867,27 @@ export function StartWorkflow() {
               </CardContent>
             </Card>
 
-            {files.length > 0 && showUnsupportedCodecWarning ? (
-              <Alert severity="warning">检测到不支持的视频编码格式。可能无法处理此视频。</Alert>
-            ) : null}
+            {files.length > 0
+              ? files.map((file) => {
+                  const fileKey = getFileCacheKey(file);
+                  const supported = fileCodecSupportMap[fileKey];
+                  if (!file.type.startsWith("video/") || supported !== false) return null;
+                  return (
+                    <Alert key={fileKey} severity="warning">
+                      <Typography fontWeight={800}>{file.name}</Typography>
+                      <Typography variant="body2" mt={0.4}>
+                        检测到不支持的视频编码格式。可能无法处理此视频。
+                      </Typography>
+                    </Alert>
+                  );
+                })
+              : null}
 
             {files.length > 0 && showUnsupportedWebCodecsWarning ? (
               <Alert severity="warning">
-                <Typography fontWeight={800}>此浏览器无法使用视频水印。</Typography>
+                <Typography fontWeight={800}>您的浏览器不支持硬件编码。</Typography>
                 <Typography variant="body2" mt={0.4}>
-                  您可以尝试使用系统默认浏览器、Via浏览器、X浏览器、夸克、Edge、Chrome、Firefox（不含
-                  Android 版）等现代浏览器使用本应用。
+                  编码视频可能出现速度慢及设备发烫、耗电量高的情况。如果您接受，请继续——否则请切换到现代桌面设备或现代Android设备。
                 </Typography>
               </Alert>
             ) : null}

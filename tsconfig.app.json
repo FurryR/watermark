@@ -13,7 +13,8 @@
     "allowImportingTsExtensions": true,
     "paths": {
       "schema": ["./src/template/schema/index.ts"],
-      "typings": ["./src/template/typings/index.ts"]
+      "typings": ["./src/template/typings/index.ts"],
+      "libavjs-webcodecs-polyfill": ["./src/vendor/libavjs-webcodecs-polyfill.d.ts"]
     },
     "verbatimModuleSyntax": true,
     "moduleDetection": "force",

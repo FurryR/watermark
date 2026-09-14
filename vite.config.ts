@@ -53,10 +53,28 @@ export default defineConfig({
   ],
   build: {
     sourcemap: true,
+    rolldownOptions: {
+      output: {
+        codeSplitting: {
+          groups: [
+            { name: "vendor-pixi", test: /[\\/]node_modules[\\/]pixi\.js[\\/]/ },
+            { name: "vendor-mediabunny", test: /[\\/]node_modules[\\/]mediabunny[\\/]/ },
+            { name: "vendor-babel", test: /[\\/]node_modules[\\/]@babel[\\/]/ },
+            { name: "vendor-monaco", test: /[\\/]node_modules[\\/]monaco-editor[\\/]/ },
+          ],
+        },
+      },
+    },
   },
   resolve: {
     alias: {
       schema: fileURLToPath(new URL("./src/template/schema/index.ts", import.meta.url)),
+      "libav-asm-factory": fileURLToPath(
+        new URL(
+          "./node_modules/@libav.js/variant-webm-vp9/dist/libav-6.7.7.1.1-webm-vp9.asm.mjs",
+          import.meta.url,
+        ),
+      ),
     },
   },
   worker: {

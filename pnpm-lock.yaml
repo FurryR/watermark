@@ -16,6 +16,9 @@ importers:
       "@emotion/styled":
         specifier: ^11.14.1
         version: 11.14.1(@emotion/react@11.14.0(@types/react@19.2.14)(react@19.2.4))(@types/react@19.2.14)(react@19.2.4)
+      "@libav.js/variant-webm-vp9":
+        specifier: 6.7.7
+        version: 6.7.7
       "@monaco-editor/react":
         specifier: ^4.7.0
         version: 4.7.0(monaco-editor@0.55.1)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
@@ -28,6 +31,9 @@ importers:
       jszip:
         specifier: ^3.10.1
         version: 3.10.1
+      libavjs-webcodecs-polyfill:
+        specifier: ^0.5.5
+        version: 0.5.5
       mediabunny:
         specifier: ^1.40.1
         version: 1.40.1
@@ -1276,6 +1282,18 @@ packages:
         integrity: sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw==,
       }
 
+  "@libav.js/types@6.10.9":
+    resolution:
+      {
+        integrity: sha512-AdngxD/VO8OI6/w7wlJC77kuFcsSvCUuo2RuC6gGeSW2DEvbzgBo2JtFLV6UWZp/tRNZhKm6jS0Tv8gwCKBHLg==,
+      }
+
+  "@libav.js/variant-webm-vp9@6.7.7":
+    resolution:
+      {
+        integrity: sha512-4d+NRJ7abP9bWqA5+pr82ohSZAktinzXP1mEnkU1sauyECM77LGA1TFfwTvvCuzcqij9U0T5XHxy4MKdkjoXKg==,
+      }
+
   "@monaco-editor/loader@1.7.0":
     resolution:
       {
@@ -1872,6 +1890,12 @@ packages:
       }
     engines: { node: ^18.18.0 || ^20.9.0 || >=21.1.0 }
 
+  "@ungap/global-this@0.4.4":
+    resolution:
+      {
+        integrity: sha512-mHkm6FvepJECMNthFuIgpAEFmPOk71UyXuIxYfjytvFTnSDBIz7jmViO+LfHI/AjrazWije0PnSP3+/NlwzqtA==,
+      }
+
   "@vitejs/plugin-react@6.0.1":
     resolution:
       {
@@ -1900,6 +1924,7 @@ packages:
         integrity: sha512-9k/gHF6n/pAi/9tqr3m3aqkuiNosYTurLLUtc7xQ9sxB/wm7WPygCv8GYa6mS0fLJEHhqMC1ATYhz++U/lRHqg==,
       }
     engines: { node: ">=10.0.0" }
+    deprecated: this version has critical issues, please update to the latest version
 
   acorn-jsx@5.3.2:
     resolution:
@@ -2425,6 +2450,7 @@ packages:
         integrity: sha512-XoMjdBOwe/esVgEvLmNsD3IRHkm7fbKIUGvrleloJXUZgDHig2IPWNniv+GwjyJXzuNqVjlr5+4yVUZjycJwfQ==,
       }
     engines: { node: ^18.18.0 || ^20.9.0 || >=21.1.0 }
+    deprecated: This version is no longer supported. Please see https://eslint.org/version-support for other options.
     hasBin: true
     peerDependencies:
       jiti: "*"
@@ -3167,6 +3193,12 @@ packages:
         integrity: sha512-+bT2uH4E5LGE7h/n3evcS/sQlJXCpIp6ym8OWJ5eV6+67Dsql/LaaT7qJBAt2rzfoa/5QBGBhxDix1dMt2kQKQ==,
       }
     engines: { node: ">= 0.8.0" }
+
+  libavjs-webcodecs-polyfill@0.5.5:
+    resolution:
+      {
+        integrity: sha512-1RhFwKgYg/dsn0Ej4kf0z35t6G3/JZnStKqPHArOqALlvwG654NZes0AFXaJGzRLBknwLXiKw9qlemct97YE7w==,
+      }
 
   lie@3.3.0:
     resolution:
@@ -5463,6 +5495,10 @@ snapshots:
       "@jridgewell/resolve-uri": 3.1.2
       "@jridgewell/sourcemap-codec": 1.5.5
 
+  "@libav.js/types@6.10.9": {}
+
+  "@libav.js/variant-webm-vp9@6.7.7": {}
+
   "@monaco-editor/loader@1.7.0":
     dependencies:
       state-local: 1.0.7
@@ -5848,6 +5884,8 @@ snapshots:
     dependencies:
       "@typescript-eslint/types": 8.58.0
       eslint-visitor-keys: 5.0.1
+
+  "@ungap/global-this@0.4.4": {}
 
   "@vitejs/plugin-react@6.0.1(vite@8.0.3(@emnapi/core@1.9.2)(@emnapi/runtime@1.9.2)(@types/node@24.12.2)(terser@5.46.1))":
     dependencies:
@@ -6638,6 +6676,11 @@ snapshots:
     dependencies:
       prelude-ls: 1.2.1
       type-check: 0.4.0
+
+  libavjs-webcodecs-polyfill@0.5.5:
+    dependencies:
+      "@libav.js/types": 6.10.9
+      "@ungap/global-this": 0.4.4
 
   lie@3.3.0:
     dependencies:

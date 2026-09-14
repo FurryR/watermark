@@ -23,6 +23,7 @@ import {
   canEncodeVideo,
 } from "mediabunny";
 import type { VideoCodec } from "mediabunny";
+import { ensureWebCodecsPolyfill } from "./webCodecsPolyfill";
 
 interface PixiTextureLike {
   uid?: number;
@@ -54,7 +55,11 @@ interface PixiApplicationLike {
 interface PixiExtensionsLike {
   _addHandlers?: Record<string, unknown>;
   _removeHandlers?: Record<string, unknown>;
-  handle?: (type: string, onAdd: (ext: unknown) => void, onRemove: (ext: unknown) => void) => unknown;
+  handle?: (
+    type: string,
+    onAdd: (ext: unknown) => void,
+    onRemove: (ext: unknown) => void,
+  ) => unknown;
   __templatePatchedHandle?: boolean;
 }
 
@@ -326,10 +331,12 @@ function ensurePixiRuntimeEnvironment() {
     return;
   }
 
-  const domAdapter = (PIXI as unknown as {
-    DOMAdapter?: { set?: (adapter: unknown) => void };
-    WebWorkerAdapter?: unknown;
-  }).DOMAdapter;
+  const domAdapter = (
+    PIXI as unknown as {
+      DOMAdapter?: { set?: (adapter: unknown) => void };
+      WebWorkerAdapter?: unknown;
+    }
+  ).DOMAdapter;
   const webWorkerAdapter = (PIXI as unknown as { WebWorkerAdapter?: unknown }).WebWorkerAdapter;
 
   if (domAdapter && typeof domAdapter.set === "function" && webWorkerAdapter) {
@@ -1119,6 +1126,7 @@ export async function executeTemplateApp(options: {
   logger: RuntimeLogger;
   signal?: AbortSignal;
 }) {
+  await ensureWebCodecsPolyfill();
   ensureWebCodecsLifecycleGuards();
   ensurePixiRuntimeLifecycleGuards();
   ensurePixiRuntimeEnvironment();
