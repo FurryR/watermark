@@ -5,7 +5,9 @@ settings:
   excludeLinksFromLockfile: false
 
 patchedDependencies:
-  libavjs-webcodecs-polyfill@0.5.5: 9d1954781c0e3ed16571d21b42f3dde08866f72b83763844de10016763080585
+  libavjs-webcodecs-polyfill@0.5.5:
+    hash: 9d1954781c0e3ed16571d21b42f3dde08866f72b83763844de10016763080585
+    path: patches/libavjs-webcodecs-polyfill@0.5.5.patch
 
 importers:
 
