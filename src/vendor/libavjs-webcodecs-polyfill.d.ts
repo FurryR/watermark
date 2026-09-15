@@ -1,4 +1,4 @@
-declare module "libav-asm-factory" {
+declare module "libav-wasm-factory" {
   const factory: unknown;
   export default factory;
 }

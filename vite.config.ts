@@ -69,9 +69,9 @@ export default defineConfig({
   resolve: {
     alias: {
       schema: fileURLToPath(new URL("./src/template/schema/index.ts", import.meta.url)),
-      "libav-asm-factory": fileURLToPath(
+      "libav-wasm-factory": fileURLToPath(
         new URL(
-          "./node_modules/@libav.js/variant-webm-vp9/dist/libav-6.7.7.1.1-webm-vp9.asm.mjs",
+          "./node_modules/@uwx/libav.js-all/dist/libav-6.0.0-nightly.29.f420ff.ffmpeg.6.1.1-all.wasm.mjs",
           import.meta.url,
         ),
       ),

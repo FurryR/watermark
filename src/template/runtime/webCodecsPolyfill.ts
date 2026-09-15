@@ -33,19 +33,18 @@ export function ensureWebCodecsPolyfill(): Promise<boolean> {
   if (!polyfillLoadPromise) {
     polyfillLoadPromise = Promise.all([
       import("libavjs-webcodecs-polyfill"),
-      import("@libav.js/variant-webm-vp9"),
-      import("libav-asm-factory"),
+      import("@uwx/libav.js-all"),
+      import("libav-wasm-factory"),
     ])
-      .then(([{ load }, libavModule, asmModule]) => {
+      .then(([{ load }, libavModule, factoryModule]) => {
         const libav = libavModule.default as never;
-        const asmFactory = asmModule.default as never;
+        const factory = factoryModule.default as never;
         return load({
           polyfill: true,
           LibAV: libav,
           libavOptions: {
             noworker: true,
-            nowasm: true,
-            factory: asmFactory,
+            factory,
           },
         });
       })
