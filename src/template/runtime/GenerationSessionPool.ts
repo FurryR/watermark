@@ -14,6 +14,7 @@ export interface GenerationPoolOptions {
   logger: RuntimeLogger;
   maxConcurrency: number;
   outputProfile?: RuntimeOutputProfile;
+  forceSoftwareWebCodecs?: boolean;
 }
 
 /**
@@ -51,6 +52,7 @@ export class GenerationSessionPool {
       entry: this.options.entry ?? "index.ts",
       logger: this.options.logger,
       logPrefix: "template-main-thread-generate",
+      forceSoftwareWebCodecs: this.options.forceSoftwareWebCodecs,
     });
     this.sessions.push(session);
     this.available.push(index);

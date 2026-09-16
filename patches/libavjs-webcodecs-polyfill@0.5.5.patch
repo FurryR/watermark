@@ -1,5 +1,5 @@
 diff --git a/dist/libavjs-webcodecs-polyfill.mjs b/dist/libavjs-webcodecs-polyfill.mjs
-index 73d42cf05837562fa7c4cc17f68760d49634f136..44bd11f721a68e08f4116ae28e52b3693d259c07 100644
+index 73d42cf..fba0f1c 100644
 --- a/dist/libavjs-webcodecs-polyfill.mjs
 +++ b/dist/libavjs-webcodecs-polyfill.mjs
 @@ -617,7 +617,9 @@ function codecs(encoders) {
@@ -68,7 +68,32 @@ index 73d42cf05837562fa7c4cc17f68760d49634f136..44bd11f721a68e08f4116ae28e52b369
              ctx, options
          };
      }
-@@ -2997,8 +3004,33 @@ let VideoDecoder$1 = class VideoDecoder extends DequeueEventTarget {
+@@ -1981,10 +1988,12 @@ let VideoFrame$1 = class VideoFrame {
+                 timestamp: (init === null || init === void 0 ? void 0 : init.timestamp) || data.timestamp,
+                 /* Assign the result of calling Copy VideoFrame metadata with
+                  * init’s metadata to frame.[[metadata]]. */
+-                metadata: JSON.parse(JSON.stringify(init === null || init === void 0 ? void 0 : init.metadata))
++                metadata: (init === null || init === void 0 ? void 0 : init.metadata) === void 0
++                    ? void 0
++                    : JSON.parse(JSON.stringify(init.metadata))
+             });
+         }
+-        else if (data instanceof HTMLVideoElement) {
++        else if (typeof HTMLVideoElement !== "undefined" && data instanceof HTMLVideoElement) {
+             /* Check the usability of the image argument. If this throws an
+              * exception or returns bad, then throw an InvalidStateError
+              * DOMException. */
+@@ -2142,7 +2151,8 @@ let VideoFrame$1 = class VideoFrame {
+             for (let i = 0; i < numPlanes_; i++) {
+                 const sampleWidth = horizontalSubSamplingFactor(format, i);
+                 const sampleHeight = verticalSubSamplingFactor(format, i);
+-                const stride = ~~(this.codedWidth / sampleWidth);
++                const sampleBytes_ = sampleBytes(format, i);
++                const stride = ~~(this.codedWidth / sampleWidth) * sampleBytes_;
+                 layout.push({ offset, stride });
+                 offset += stride * (~~(this.codedHeight / sampleHeight));
+             }
+@@ -2997,8 +3007,33 @@ let VideoDecoder$1 = class VideoDecoder extends DequeueEventTarget {
              // 4. Configure [[codec implementation]] with config.
              const libav = this._libav = yield get();
              // Initialize
@@ -104,7 +129,7 @@ index 73d42cf05837562fa7c4cc17f68760d49634f136..44bd11f721a68e08f4116ae28e52b369
              yield libav.AVCodecContext_time_base_s(this._c, 1, 1000);
              // 5. queue a task to run the following steps:
              // 1. Assign false to [[message queue blocked]].
-@@ -3382,9 +3414,13 @@ let VideoEncoder$1 = class VideoEncoder extends DequeueEventTarget {
+@@ -3382,9 +3417,13 @@ let VideoEncoder$1 = class VideoEncoder extends DequeueEventTarget {
              const libav = this._libav = yield get();
              this._metadata = {
                  decoderConfig: {

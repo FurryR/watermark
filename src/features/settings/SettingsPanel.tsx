@@ -13,8 +13,13 @@ import {
 import { useRuntimeSettings } from "./runtimeSettings";
 
 export function SettingsPanel() {
-  const { settings, setUseMainThreadRender, setMaxConcurrency, resetSettings } =
-    useRuntimeSettings();
+  const {
+    settings,
+    setUseMainThreadRender,
+    setForceSoftwareWebCodecs,
+    setMaxConcurrency,
+    resetSettings,
+  } = useRuntimeSettings();
 
   return (
     <Stack spacing={2.2}>
@@ -35,6 +40,19 @@ export function SettingsPanel() {
               }
               label="使用主线程渲染（仅调试）"
             />
+
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={settings.forceSoftwareWebCodecs}
+                  onChange={(event) => setForceSoftwareWebCodecs(event.target.checked)}
+                />
+              }
+              label="使用软件解码（仅调试）"
+            />
+            <Typography variant="body2" color="text.secondary">
+              强制使用 libav.js 软件编解码，忽略浏览器的硬件 WebCodecs 实现。
+            </Typography>
 
             <TextField
               type="number"

@@ -18,6 +18,7 @@ export interface TemplateWorkerSessionOptions {
   files: TemplateWorkspaceFiles;
   entry?: string;
   logger?: RuntimeLogger;
+  forceSoftwareWebCodecs?: boolean;
 }
 
 function makeRequestId(prefix: string): string {
@@ -161,7 +162,13 @@ export class TemplateWorkerSession {
     const result = await this.request({
       type: "run-template",
       requestId,
-      payload: { config, mediaFile, maxDurationMilliseconds, outputProfile },
+      payload: {
+        config,
+        mediaFile,
+        maxDurationMilliseconds,
+        outputProfile,
+        forceSoftwareWebCodecs: this.options.forceSoftwareWebCodecs,
+      },
     });
 
     return { ok: result.ok, value: result.value, error: result.error };

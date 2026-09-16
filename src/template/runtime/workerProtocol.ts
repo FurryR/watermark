@@ -49,6 +49,7 @@ export interface WorkerRunRequest {
     mediaFile?: File;
     maxDurationMilliseconds?: number;
     outputProfile?: RuntimeOutputProfile;
+    forceSoftwareWebCodecs?: boolean;
   };
 }
 

@@ -542,6 +542,7 @@ export function StartWorkflow() {
   const previewSignatureRef = useRef("");
   const previewActiveFileRef = useRef("");
   const isMainThreadDebugMode = settings.useMainThreadRender;
+  const forceSoftwareWebCodecs = settings.forceSoftwareWebCodecs;
   const runtimeMode: "worker" | "main-thread" = isMainThreadDebugMode ? "main-thread" : "worker";
 
   const selectedTemplate = templates.find((item) => item.id === selectedTemplateId);
@@ -633,8 +634,15 @@ export function StartWorkflow() {
   const hasStartDraft =
     files.length > 0 || Boolean(selectedTemplateId) || Object.keys(params).length > 0;
   const previewSignature = useMemo(
-    () => JSON.stringify({ params, activeIndex, selectedTemplateId, isMainThreadDebugMode }),
-    [params, activeIndex, selectedTemplateId, isMainThreadDebugMode],
+    () =>
+      JSON.stringify({
+        params,
+        activeIndex,
+        selectedTemplateId,
+        isMainThreadDebugMode,
+        forceSoftwareWebCodecs,
+      }),
+    [params, activeIndex, selectedTemplateId, isMainThreadDebugMode, forceSoftwareWebCodecs],
   );
 
   const currentEditingSnapshot = useMemo<TemplateConfigSnapshot>(
@@ -994,6 +1002,7 @@ export function StartWorkflow() {
         error: (...args: unknown[]) => console.error("[template-runtime][evaluate]", ...args),
       },
       logPrefix: "template-main-thread-evaluate",
+      forceSoftwareWebCodecs,
     });
 
     const initialized = await evaluationSession.initialize();
@@ -1088,6 +1097,7 @@ export function StartWorkflow() {
         error: (...args: unknown[]) => console.error("[template-runtime][evaluate]", ...args),
       },
       logPrefix: "template-main-thread-evaluate",
+      forceSoftwareWebCodecs,
     });
 
     const initialized = await session.initialize();
@@ -1141,6 +1151,7 @@ export function StartWorkflow() {
       entry: "index.ts",
       logger: runtimeLogger,
       logPrefix: "template-main-thread",
+      forceSoftwareWebCodecs,
     });
     previewRuntimeSessionRef.current = previewSession;
 
@@ -1384,6 +1395,38 @@ export function StartWorkflow() {
   }, [currentFile]);
 
   useEffect(() => {
+    const uncachedVideoFiles = files.filter(
+      (file) =>
+        file.type.startsWith("video/") && fileCodecSupportMap[getFileCacheKey(file)] === undefined,
+    );
+    if (uncachedVideoFiles.length === 0) return;
+
+    let cancelled = false;
+    void (async () => {
+      const entries = await Promise.all(
+        uncachedVideoFiles.map(async (file) => {
+          const key = getFileCacheKey(file);
+          const isSupported = await detectFileCodecSupport(file);
+          return [key, isSupported] as const;
+        }),
+      );
+      if (cancelled) return;
+
+      setFileCodecSupportMap((prev) => {
+        const nextMap = { ...prev };
+        for (const [key, isSupported] of entries) {
+          nextMap[key] = isSupported;
+        }
+        return nextMap;
+      });
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [files, fileCodecSupportMap]);
+
+  useEffect(() => {
     if (!currentFile) return;
     const cacheKey = getFileCacheKey(currentFile);
     if (mediaDimensionMap[cacheKey]) return;
@@ -1424,6 +1467,10 @@ export function StartWorkflow() {
   }, [runtimeMode]);
 
   useEffect(() => {
+    void disposeEvaluationSession();
+  }, [forceSoftwareWebCodecs]);
+
+  useEffect(() => {
     if (!previewLoading) return;
     if (previewSignatureRef.current === previewSignature) return;
 
@@ -1460,7 +1507,7 @@ export function StartWorkflow() {
     };
     // evaluateParamsUsingRuntime captures runtime session/context internals; this effect intentionally keys off params/template/mode.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [params, selectedTemplate, runtimeMode]);
+  }, [params, selectedTemplate, runtimeMode, forceSoftwareWebCodecs]);
 
   useEffect(() => {
     if (!canPreview || !selectedTemplate || !currentFile) return;
@@ -1483,6 +1530,7 @@ export function StartWorkflow() {
     state,
     loadingSchema,
     isMainThreadDebugMode,
+    forceSoftwareWebCodecs,
     isPointerAdjusting,
   ]);
 
@@ -1493,45 +1541,19 @@ export function StartWorkflow() {
       return /(jpe?g|png|webp|avif|mp4|mov|mkv)$/i.test(file.name);
     });
 
-    let merged: File[] = [];
-    setFiles((prev) => {
-      merged = [...prev];
-      for (const file of next) {
-        const exists = merged.some(
-          (item) =>
-            item.name === file.name &&
-            item.size === file.size &&
-            item.lastModified === file.lastModified,
-        );
-        if (!exists) merged.push(file);
-      }
-      if (prev.length === 0 && merged.length > 0) {
-        setActiveIndex(0);
-      }
-      return merged;
-    });
-
-    const uncachedVideoFiles = merged.filter((file) => {
-      if (!file.type.startsWith("video/")) return false;
-      return fileCodecSupportMap[getFileCacheKey(file)] === undefined;
-    });
-
-    if (uncachedVideoFiles.length > 0) {
-      const entries = await Promise.all(
-        uncachedVideoFiles.map(async (file) => {
-          const key = getFileCacheKey(file);
-          const isSupported = await detectFileCodecSupport(file);
-          return [key, isSupported] as const;
-        }),
+    const merged: File[] = [...files];
+    for (const file of next) {
+      const exists = merged.some(
+        (item) =>
+          item.name === file.name &&
+          item.size === file.size &&
+          item.lastModified === file.lastModified,
       );
-
-      setFileCodecSupportMap((prev) => {
-        const nextMap = { ...prev };
-        for (const [key, isSupported] of entries) {
-          nextMap[key] = isSupported;
-        }
-        return nextMap;
-      });
+      if (!exists) merged.push(file);
+    }
+    setFiles(merged);
+    if (files.length === 0 && merged.length > 0) {
+      setActiveIndex(0);
     }
 
     const uncachedDimensionFiles = merged.filter(
@@ -1728,6 +1750,7 @@ export function StartWorkflow() {
                 },
               },
               maxConcurrency: settings.maxConcurrency,
+              forceSoftwareWebCodecs,
             });
             poolByTemplate.set(template.id, pool);
           }

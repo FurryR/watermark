@@ -57,6 +57,7 @@ class MainThreadRuntimeSession implements TemplateRuntimeSession {
     entry?: string;
     logger?: RuntimeLogger;
     logPrefix?: string;
+    forceSoftwareWebCodecs?: boolean;
   };
 
   constructor(options: {
@@ -64,6 +65,7 @@ class MainThreadRuntimeSession implements TemplateRuntimeSession {
     entry?: string;
     logger?: RuntimeLogger;
     logPrefix?: string;
+    forceSoftwareWebCodecs?: boolean;
   }) {
     this.options = options;
   }
@@ -158,6 +160,7 @@ class MainThreadRuntimeSession implements TemplateRuntimeSession {
         outputProfile,
         logger: this.getLogger(),
         signal,
+        forceSoftwareWebCodecs: this.options.forceSoftwareWebCodecs,
       });
       return { ok: true, value };
     } catch (error) {
@@ -211,12 +214,14 @@ export function createTemplateRuntimeSession(options: {
   entry?: string;
   logger?: RuntimeLogger;
   logPrefix?: string;
+  forceSoftwareWebCodecs?: boolean;
 }): TemplateRuntimeSession {
   if (options.mode === "worker") {
     const workerSession = new TemplateWorkerSession({
       files: options.files,
       entry: options.entry,
       logger: options.logger,
+      forceSoftwareWebCodecs: options.forceSoftwareWebCodecs,
     });
     return new WorkerRuntimeSessionAdapter(workerSession);
   }

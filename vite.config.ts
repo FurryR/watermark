@@ -33,8 +33,9 @@ export default defineConfig({
         ],
       },
       workbox: {
-        maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
-        globPatterns: ["**/*.{js,css,html,svg,png,ico}"],
+        // libav.js 软解/软编的 wasm 约 15 MB，需放宽单文件上限才能被预缓存。
+        maximumFileSizeToCacheInBytes: 24 * 1024 * 1024,
+        globPatterns: ["**/*.{js,css,html,svg,png,ico,wasm}"],
         navigateFallback: "/index.html",
         runtimeCaching: [
           {

@@ -6,6 +6,7 @@ const STORAGE_KEY = "watermark-studio.runtime-settings.v1";
 
 export interface RuntimeSettingsState {
   useMainThreadRender: boolean;
+  forceSoftwareWebCodecs: boolean;
   maxConcurrency: number;
 }
 
@@ -40,6 +41,7 @@ function detectInitialMaxConcurrency() {
 function createDefaultRuntimeSettings(): RuntimeSettingsState {
   return {
     useMainThreadRender: false,
+    forceSoftwareWebCodecs: false,
     maxConcurrency: detectInitialMaxConcurrency(),
   };
 }
@@ -49,6 +51,7 @@ const DEFAULT_RUNTIME_SETTINGS: RuntimeSettingsState = createDefaultRuntimeSetti
 interface RuntimeSettingsContextValue {
   settings: RuntimeSettingsState;
   setUseMainThreadRender: (value: boolean) => void;
+  setForceSoftwareWebCodecs: (value: boolean) => void;
   setMaxConcurrency: (value: number) => void;
   resetSettings: () => void;
 }
@@ -71,6 +74,7 @@ function loadSettings(): RuntimeSettingsState {
     const parsed = JSON.parse(raw) as Partial<RuntimeSettingsState>;
     return {
       useMainThreadRender: Boolean(parsed.useMainThreadRender),
+      forceSoftwareWebCodecs: Boolean(parsed.forceSoftwareWebCodecs),
       maxConcurrency: sanitizeMaxConcurrency(parsed.maxConcurrency),
     };
   } catch {
@@ -91,6 +95,9 @@ export function RuntimeSettingsProvider({ children }: { children: ReactNode }) {
       settings,
       setUseMainThreadRender: (next: boolean) => {
         setSettings((prev) => ({ ...prev, useMainThreadRender: next }));
+      },
+      setForceSoftwareWebCodecs: (next: boolean) => {
+        setSettings((prev) => ({ ...prev, forceSoftwareWebCodecs: next }));
       },
       setMaxConcurrency: (next: number) => {
         setSettings((prev) => ({ ...prev, maxConcurrency: sanitizeMaxConcurrency(next) }));

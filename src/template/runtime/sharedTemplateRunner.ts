@@ -1125,8 +1125,9 @@ export async function executeTemplateApp(options: {
   outputProfile?: RuntimeOutputProfile;
   logger: RuntimeLogger;
   signal?: AbortSignal;
+  forceSoftwareWebCodecs?: boolean;
 }) {
-  await ensureWebCodecsPolyfill();
+  await ensureWebCodecsPolyfill({ force: options.forceSoftwareWebCodecs });
   ensureWebCodecsLifecycleGuards();
   ensurePixiRuntimeLifecycleGuards();
   ensurePixiRuntimeEnvironment();

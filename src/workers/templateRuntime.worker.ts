@@ -94,6 +94,7 @@ async function runTemplate(
     mediaFile?: File;
     maxDurationMilliseconds?: number;
     outputProfile?: RuntimeOutputProfile;
+    forceSoftwareWebCodecs?: boolean;
   },
 ) {
   const logger = createLogger(requestId);
@@ -107,6 +108,7 @@ async function runTemplate(
     mediaFile: payload.mediaFile,
     maxDurationMilliseconds: payload.maxDurationMilliseconds,
     outputProfile: payload.outputProfile,
+    forceSoftwareWebCodecs: payload.forceSoftwareWebCodecs,
     logger,
   });
 
