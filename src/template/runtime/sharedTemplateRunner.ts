@@ -273,11 +273,11 @@ function ensurePixiRuntimeLifecycleGuards() {
   ) {
     const originalHandle = pixiExtensions.handle;
     pixiExtensions.handle = function patchedHandle(type, onAdd, onRemove) {
-      // Safari/WebKit occasionally double-evaluates PIXI init path inside template runtime.
-      if (
-        (type === "texture-source" || type === "environment") &&
-        (this._addHandlers?.[type] || this._removeHandlers?.[type])
-      ) {
+      // Safari/WebKit 会在模块 worker 入口被其它 chunk 反向 import 时二次求值整个入口
+      // （WebKit bug 324459），导致 PIXI 的扩展注册重复执行。此时同一 type 已经有
+      // handler，直接复用首个 handler 即可，避免抛出 "already has a handler"。
+      // 这里对所有 type 兜底，而不仅是 texture-source/environment。
+      if (this._addHandlers?.[type] || this._removeHandlers?.[type]) {
         return this;
       }
 

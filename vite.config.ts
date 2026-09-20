@@ -10,6 +10,18 @@ const packageJson = JSON.parse(
   version?: string;
 };
 
+// 把体积大且带副作用（扩展注册）的第三方库单独拆成 chunk。
+// Safari/WebKit 存在模块 worker 入口被二次求值的缺陷：当 worker 入口 chunk
+// 承载了这些共享副作用代码、又被其它 chunk（如 pixi 的 browserAll/webworkerAll）
+// 反向 import 时，入口会被求值两次，导致 pixi 扩展重复注册并抛出
+// "Extension type application already has a handler"。主构建与 worker 构建都要拆。
+const vendorCodeSplittingGroups = [
+  { name: "vendor-pixi", test: /[\\/]node_modules[\\/]pixi\.js[\\/]/ },
+  { name: "vendor-mediabunny", test: /[\\/]node_modules[\\/]mediabunny[\\/]/ },
+  { name: "vendor-babel", test: /[\\/]node_modules[\\/]@babel[\\/]/ },
+  { name: "vendor-monaco", test: /[\\/]node_modules[\\/]monaco-editor[\\/]/ },
+];
+
 export default defineConfig({
   define: {
     __APP_VERSION__: JSON.stringify(packageJson.version ?? "0.0.0"),
@@ -57,12 +69,7 @@ export default defineConfig({
     rolldownOptions: {
       output: {
         codeSplitting: {
-          groups: [
-            { name: "vendor-pixi", test: /[\\/]node_modules[\\/]pixi\.js[\\/]/ },
-            { name: "vendor-mediabunny", test: /[\\/]node_modules[\\/]mediabunny[\\/]/ },
-            { name: "vendor-babel", test: /[\\/]node_modules[\\/]@babel[\\/]/ },
-            { name: "vendor-monaco", test: /[\\/]node_modules[\\/]monaco-editor[\\/]/ },
-          ],
+          groups: vendorCodeSplittingGroups,
         },
       },
     },
@@ -80,5 +87,12 @@ export default defineConfig({
   },
   worker: {
     format: "es",
+    rolldownOptions: {
+      output: {
+        codeSplitting: {
+          groups: vendorCodeSplittingGroups,
+        },
+      },
+    },
   },
 });

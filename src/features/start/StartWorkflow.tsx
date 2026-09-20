@@ -1328,45 +1328,29 @@ export function StartWorkflow() {
     };
   }, []);
 
-  useEffect(() => {
-    const currentSnapshot: TemplateConfigSnapshot = {
-      selectedTemplateId,
-      params,
-      normalizedParams,
-      evaluatedFields,
-    };
-    if (activeConfigTarget === "global") {
-      setGlobalTemplateConfig((prev) =>
-        isTemplateConfigSnapshotEqual(prev, currentSnapshot) ? prev : currentSnapshot,
-      );
-      return;
+  // 把当前编辑中的模板配置同步到全局配置 / 文件覆盖项。
+  // 采用 render 阶段对比调整 state（React 推荐的 derived state 模式），
+  // 替代原先在 effect 中同步 setState，避免级联渲染。
+  if (activeConfigTarget === "global") {
+    if (!isTemplateConfigSnapshotEqual(globalTemplateConfig, currentEditingSnapshot)) {
+      setGlobalTemplateConfig(currentEditingSnapshot);
     }
-
-    setFileTemplateOverrides((prev) => {
-      if (isTemplateConfigSnapshotEqual(currentSnapshot, globalTemplateConfig)) {
-        if (!prev[activeConfigTarget]) return prev;
-        const next = { ...prev };
+  } else {
+    const shouldRemove = isTemplateConfigSnapshotEqual(currentEditingSnapshot, globalTemplateConfig);
+    const existing = fileTemplateOverrides[activeConfigTarget];
+    if (shouldRemove) {
+      if (existing) {
+        const next = { ...fileTemplateOverrides };
         delete next[activeConfigTarget];
-        return next;
+        setFileTemplateOverrides(next);
       }
-
-      const existing = prev[activeConfigTarget];
-      if (existing && isTemplateConfigSnapshotEqual(existing, currentSnapshot)) {
-        return prev;
-      }
-      return {
-        ...prev,
-        [activeConfigTarget]: currentSnapshot,
-      };
-    });
-  }, [
-    activeConfigTarget,
-    selectedTemplateId,
-    params,
-    normalizedParams,
-    evaluatedFields,
-    globalTemplateConfig,
-  ]);
+    } else if (!existing || !isTemplateConfigSnapshotEqual(existing, currentEditingSnapshot)) {
+      setFileTemplateOverrides({
+        ...fileTemplateOverrides,
+        [activeConfigTarget]: currentEditingSnapshot,
+      });
+    }
+  }
 
   useEffect(() => {
     setNavigationBlocked(state === "processing");
@@ -1383,14 +1367,24 @@ export function StartWorkflow() {
     };
   }, [setNavigationBlocked, setHasUnsavedChanges]);
 
-  useEffect(() => {
+  // 当前文件被清空时，重置预览相关 UI。这里在 render 阶段按“上一次的值”对比调整 state
+  // （React 推荐的 derived state 模式），避免在 effect 中同步 setState 造成的级联渲染。
+  const [prevCurrentFile, setPrevCurrentFile] = useState<File | undefined>(currentFile);
+  if (prevCurrentFile !== currentFile) {
+    setPrevCurrentFile(currentFile);
     if (!currentFile) {
-      cleanupPreviewUrl();
       setPreviewUrl("");
       setPreviewKind("");
       setPreviewWatermarked(false);
       setZoomOpen(false);
       setPreviewError("");
+    }
+  }
+
+  // 对象 URL 的回收是外部副作用，放在 effect 里通过 ref 完成，不涉及 setState。
+  useEffect(() => {
+    if (!currentFile) {
+      cleanupPreviewUrl();
     }
   }, [currentFile]);
 

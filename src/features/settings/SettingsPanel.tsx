@@ -50,10 +50,6 @@ export function SettingsPanel() {
               }
               label="使用软件解码（仅调试）"
             />
-            <Typography variant="body2" color="text.secondary">
-              强制使用 libav.js 软件编解码，忽略浏览器的硬件 WebCodecs 实现。
-            </Typography>
-
             <TextField
               type="number"
               label="最大并发数"
