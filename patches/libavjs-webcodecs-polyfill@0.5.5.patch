@@ -1,25 +1,31 @@
 diff --git a/dist/libavjs-webcodecs-polyfill.mjs b/dist/libavjs-webcodecs-polyfill.mjs
-index 73d42cf..fba0f1c 100644
+index 73d42cf05837562fa7c4cc17f68760d49634f136..3c89dc667cd6a9e08cf748bf35ef5425f7ce0e4e 100644
 --- a/dist/libavjs-webcodecs-polyfill.mjs
 +++ b/dist/libavjs-webcodecs-polyfill.mjs
-@@ -617,7 +617,9 @@ function codecs(encoders) {
+@@ -617,7 +617,11 @@ function codecs(encoders) {
              ["libvorbis", "vorbis"],
              ["libaom-av1", "av01"],
              ["libvpx-vp9", "vp09"],
 -            ["libvpx", "vp8"]
 +            ["libvpx", "vp8"],
 +            ["h264", "avc1"],
-+            ["libopenh264", "avc1"]
++            ["libopenh264", "avc1"],
++            ["hevc", "hev1"],
++            ["hevc", "hvc1"]
          ]) {
              if (encoders) {
                  if (yield libav.avcodec_find_encoder_by_name(avname))
-@@ -682,15 +684,15 @@ function decoder(codec, config) {
+@@ -682,15 +686,19 @@ function decoder(codec, config) {
              case "vp8":
                  outCodec = "libvpx";
                  break;
 +            case "avc1":
 +            case "avc3":
 +                outCodec = "h264";
++                break;
++            case "hev1":
++            case "hvc1":
++                outCodec = "hevc";
 +                break;
              // Unsupported
              case "mp3":
@@ -33,7 +39,7 @@ index 73d42cf..fba0f1c 100644
                  return null;
              // Unrecognized
              default:
-@@ -699,7 +701,7 @@ function decoder(codec, config) {
+@@ -699,7 +707,7 @@ function decoder(codec, config) {
          // Check whether we actually support this codec
          if (!(decoders.indexOf(codec) >= 0))
              return null;
@@ -42,7 +48,7 @@ index 73d42cf..fba0f1c 100644
      }
      else {
          return codec.libavjs;
-@@ -801,12 +803,16 @@ function encoder(codec, config) {
+@@ -801,12 +809,16 @@ function encoder(codec, config) {
                      options["cpu-used"] = "8";
                  }
                  break;
@@ -60,7 +66,7 @@ index 73d42cf..fba0f1c 100644
                  return null;
              // Unrecognized
              default:
-@@ -848,6 +854,7 @@ function encoder(codec, config) {
+@@ -848,6 +860,7 @@ function encoder(codec, config) {
          }
          return {
              codec: outCodec,
@@ -68,7 +74,7 @@ index 73d42cf..fba0f1c 100644
              ctx, options
          };
      }
-@@ -1981,10 +1988,12 @@ let VideoFrame$1 = class VideoFrame {
+@@ -1981,10 +1994,12 @@ let VideoFrame$1 = class VideoFrame {
                  timestamp: (init === null || init === void 0 ? void 0 : init.timestamp) || data.timestamp,
                  /* Assign the result of calling Copy VideoFrame metadata with
                   * init’s metadata to frame.[[metadata]]. */
@@ -83,7 +89,7 @@ index 73d42cf..fba0f1c 100644
              /* Check the usability of the image argument. If this throws an
               * exception or returns bad, then throw an InvalidStateError
               * DOMException. */
-@@ -2142,7 +2151,8 @@ let VideoFrame$1 = class VideoFrame {
+@@ -2142,7 +2157,8 @@ let VideoFrame$1 = class VideoFrame {
              for (let i = 0; i < numPlanes_; i++) {
                  const sampleWidth = horizontalSubSamplingFactor(format, i);
                  const sampleHeight = verticalSubSamplingFactor(format, i);
@@ -93,7 +99,7 @@ index 73d42cf..fba0f1c 100644
                  layout.push({ offset, stride });
                  offset += stride * (~~(this.codedHeight / sampleHeight));
              }
-@@ -2997,8 +3007,33 @@ let VideoDecoder$1 = class VideoDecoder extends DequeueEventTarget {
+@@ -2997,8 +3013,34 @@ let VideoDecoder$1 = class VideoDecoder extends DequeueEventTarget {
              // 4. Configure [[codec implementation]] with config.
              const libav = this._libav = yield get();
              // Initialize
@@ -101,7 +107,8 @@ index 73d42cf..fba0f1c 100644
 -                yield libav.ff_init_decoder(supported.codec);
 +            let h264Codecpar = 0;
 +            let h264ExtradataPtr = 0;
-+            if ((supported.codecString === "avc1" || supported.codecString === "avc3") && config.description) {
++            if ((supported.codecString === "avc1" || supported.codecString === "avc3"
++                || supported.codecString === "hev1" || supported.codecString === "hvc1") && config.description) {
 +                const descView = config.description instanceof ArrayBuffer
 +                    ? new Uint8Array(config.description)
 +                    : new Uint8Array(config.description.buffer, config.description.byteOffset, config.description.byteLength);
@@ -129,7 +136,7 @@ index 73d42cf..fba0f1c 100644
              yield libav.AVCodecContext_time_base_s(this._c, 1, 1000);
              // 5. queue a task to run the following steps:
              // 1. Assign false to [[message queue blocked]].
-@@ -3382,9 +3417,13 @@ let VideoEncoder$1 = class VideoEncoder extends DequeueEventTarget {
+@@ -3382,9 +3424,13 @@ let VideoEncoder$1 = class VideoEncoder extends DequeueEventTarget {
              const libav = this._libav = yield get();
              this._metadata = {
                  decoderConfig: {

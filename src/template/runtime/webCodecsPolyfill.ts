@@ -4,6 +4,12 @@ let polyfillLoadPromise: Promise<boolean> | undefined;
 /** 已加载的 polyfill 模块（含 WebCodecs 类实现），用于调试时强制覆盖原生。 */
 let polyfillModuleRef: Record<string, unknown> | undefined;
 let polyfillNeededResolved = false;
+/**
+ * 运行时自动回落标记：当原生能力不足以处理当前媒体（缺少对应解码器/编码器）时，
+ * 会加载 libav polyfill 覆盖全局 WebCodecs 类。该标记保证后续同一会话内不会被
+ * `ensureWebCodecsPolyfill()`（默认 force=false）误恢复成原生实现。
+ */
+let softwareWebCodecsActive = false;
 
 const REQUIRED_NATIVE_CLASSES = [
   "VideoEncoder",
@@ -100,13 +106,15 @@ function loadPolyfillModule(): Promise<Record<string, unknown>> {
  * - 默认仅在浏览器缺少原生 WebCodecs 时加载，原生可用则直接跳过，不产生额外请求。
  * - `force` 为 true 时（调试用“使用软件解码”），即使原生可用，也会用 polyfill 覆盖
  *   全局的 WebCodecs 类，强制走 libav.js 软件编解码；关闭时恢复原生实现。
+ * - 一旦因为运行时自动回落（{@link activateSoftwareWebCodecs}）激活过软件实现，
+ *   后续调用即使未显式 `force` 也会继续保持软件实现，避免同一会话中途被恢复成原生。
  *
  * 幂等，可在 worker 与主线程复用。
  */
 export function ensureWebCodecsPolyfill(options?: { force?: boolean }): Promise<boolean> {
   const force = Boolean(options?.force);
 
-  if (!force) {
+  if (!force && !softwareWebCodecsActive) {
     restoreNativeOverrides();
     if (!isWebCodecsPolyfillNeeded()) {
       polyfillNeededResolved = true;
@@ -128,11 +136,37 @@ export function ensureWebCodecsPolyfill(options?: { force?: boolean }): Promise<
   }
 
   return polyfillLoadPromise.then((loaded) => {
-    if (force && loaded) {
+    // 只要 polyfill 被加载（因缺少原生类 / 强制软件 / 运行时回落），就用其实现
+    // 覆盖全部 WebCodecs 类。polyfill 自身的 load({polyfill:true}) 只会补齐缺失的类
+    // （`if (!globalThis[name])`），无法替换“存在但能力不足”的原生实现——例如
+    // Firefox for Android 有 VideoEncoder 却不支持 H.264。混合原生 VideoFrame 与
+    // 软件编解码器也会导致不兼容，因此这里必须整体覆盖。
+    if (loaded) {
       applyPolyfillOverrides();
     }
     return loaded;
   });
+}
+
+/**
+ * 运行时自动回落：当原生 WebCodecs 无法处理当前媒体时，加载 libav polyfill 并用其
+ * 覆盖全局 WebCodecs 类。加载/覆盖成功后，该会话内软件实现保持激活，不会被
+ * {@link ensureWebCodecsPolyfill} 恢复。
+ *
+ * 返回是否成功启用了软件实现。
+ */
+export function activateSoftwareWebCodecs(): Promise<boolean> {
+  return ensureWebCodecsPolyfill({ force: true }).then((loaded) => {
+    if (loaded) {
+      softwareWebCodecsActive = true;
+      return true;
+    }
+    return false;
+  });
+}
+
+export function isSoftwareWebCodecsActive(): boolean {
+  return softwareWebCodecsActive;
 }
 
 export function didResolveWebCodecsPolyfill(): boolean {

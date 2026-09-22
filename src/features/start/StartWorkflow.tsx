@@ -48,6 +48,10 @@ import { useUnsavedChangesGuard } from "../../unsavedChangesGuard";
 import { GenerationSessionPool } from "../../template/runtime/GenerationSessionPool";
 import { mapConcurrency } from "../../utils/mapConcurrency";
 import { throttleProgressUpdates } from "../../utils/throttleProgressUpdates";
+import {
+  isSoftwareDecodableAudioCodecString,
+  isSoftwareDecodableVideoCodecString,
+} from "../../template/runtime/softwareCodecs";
 
 const acceptTypes = [
   "image/jpeg",
@@ -352,8 +356,10 @@ async function readTrackCodec(
   return track.codec?.trim() ?? "";
 }
 
-async function detectFileCodecSupport(file: File) {
-  if (!file.type.startsWith("video/")) return true;
+type VideoCodecSupportStatus = "native" | "software" | "unsupported";
+
+async function detectFileCodecSupport(file: File): Promise<VideoCodecSupportStatus> {
+  if (!file.type.startsWith("video/")) return "native";
 
   const fileTag = `${file.name} (${file.type || "unknown"}, ${file.size} bytes)`;
   console.info("[media-codec-check] start", { file: fileTag });
@@ -376,15 +382,24 @@ async function detectFileCodecSupport(file: File) {
         canDecode?: () => Promise<boolean>;
       } | null,
     );
+    let videoFallsBackToSoftware = false;
     if (videoCodec) {
       const videoSupported =
         typeof videoTrack?.canDecode === "function" ? await videoTrack.canDecode() : true;
       if (!videoSupported) {
-        console.warn("[media-codec-check] unsupported video codec", {
-          file: fileTag,
-          codec: videoCodec,
-        });
-        return false;
+        if (isSoftwareDecodableVideoCodecString(videoCodec)) {
+          console.info("[media-codec-check] video codec falls back to software decoding", {
+            file: fileTag,
+            codec: videoCodec,
+          });
+          videoFallsBackToSoftware = true;
+        } else {
+          console.warn("[media-codec-check] unsupported video codec", {
+            file: fileTag,
+            codec: videoCodec,
+          });
+          return "unsupported";
+        }
       }
     }
 
@@ -398,23 +413,28 @@ async function detectFileCodecSupport(file: File) {
     if (audioCodec) {
       const audioSupported =
         typeof audioTrack?.canDecode === "function" ? await audioTrack.canDecode() : true;
-      if (!audioSupported) {
+      if (!audioSupported && !isSoftwareDecodableAudioCodecString(audioCodec)) {
         console.warn("[media-codec-check] unsupported audio codec", {
           file: fileTag,
           codec: audioCodec,
         });
-        return false;
+        return "unsupported";
       }
     }
 
-    console.info("[media-codec-check] supported", { file: fileTag, videoCodec, audioCodec });
-    return true;
+    console.info("[media-codec-check] supported", {
+      file: fileTag,
+      videoCodec,
+      audioCodec,
+      softwareVideo: videoFallsBackToSoftware,
+    });
+    return videoFallsBackToSoftware ? "software" : "native";
   } catch (error) {
     console.error("[media-codec-check] failed to inspect codec; fallback to supported", {
       file: fileTag,
       error,
     });
-    return true;
+    return "native";
   } finally {
     inputFile.dispose();
   }
@@ -521,7 +541,9 @@ export function StartWorkflow() {
   const [previewUrl, setPreviewUrl] = useState("");
   const [previewKind, setPreviewKind] = useState<"image" | "video" | "">("");
   const [previewWatermarked, setPreviewWatermarked] = useState(false);
-  const [fileCodecSupportMap, setFileCodecSupportMap] = useState<Record<string, boolean>>({});
+  const [fileCodecSupportMap, setFileCodecSupportMap] = useState<
+    Record<string, VideoCodecSupportStatus>
+  >({});
   const [mediaDimensionMap, setMediaDimensionMap] = useState<
     Record<string, { width: number; height: number }>
   >({});
@@ -1298,7 +1320,7 @@ export function StartWorkflow() {
     }
 
     setFileCodecSupportMap((prev) => {
-      const nextMap: Record<string, boolean> = {};
+      const nextMap: Record<string, VideoCodecSupportStatus> = {};
       for (const [key, value] of Object.entries(prev)) {
         if (files.some((file, idx) => idx !== index && getFileCacheKey(file) === key)) {
           nextMap[key] = value;
@@ -2888,15 +2910,28 @@ export function StartWorkflow() {
               ? files.map((file) => {
                   const fileKey = getFileCacheKey(file);
                   const supported = fileCodecSupportMap[fileKey];
-                  if (!file.type.startsWith("video/") || supported !== false) return null;
-                  return (
-                    <Alert key={fileKey} severity="warning">
-                      <Typography fontWeight={800}>{file.name}</Typography>
-                      <Typography variant="body2" mt={0.4}>
-                        检测到不支持的视频编码格式。可能无法处理此视频。
-                      </Typography>
-                    </Alert>
-                  );
+                  if (!file.type.startsWith("video/")) return null;
+                  if (supported === "unsupported") {
+                    return (
+                      <Alert key={fileKey} severity="warning">
+                        <Typography fontWeight={800}>{file.name}</Typography>
+                        <Typography variant="body2" mt={0.4}>
+                          检测到不支持的视频编码格式。可能无法处理此视频。
+                        </Typography>
+                      </Alert>
+                    );
+                  }
+                  if (supported === "software") {
+                    return (
+                      <Alert key={fileKey} severity="info">
+                        <Typography fontWeight={800}>{file.name}</Typography>
+                        <Typography variant="body2" mt={0.4}>
+                          当前浏览器无法硬解该视频编码，将自动回落到软件解码（速度较慢、耗电较高）。
+                        </Typography>
+                      </Alert>
+                    );
+                  }
+                  return null;
                 })
               : null}
 

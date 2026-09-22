@@ -6,7 +6,7 @@ settings:
 
 patchedDependencies:
   libavjs-webcodecs-polyfill@0.5.5:
-    hash: 576303f31b65b1c3bbdce3b5090e3f08f321d624aed079a390572f757f32eba6
+    hash: a0022ece9e5d2c2fb22961e52378ba21e4d33ed14a5fb6c03465a70138622382
     path: patches/libavjs-webcodecs-polyfill@0.5.5.patch
 
 importers:
@@ -39,7 +39,7 @@ importers:
         version: 3.10.2
       libavjs-webcodecs-polyfill:
         specifier: ^0.5.5
-        version: 0.5.5(patch_hash=576303f31b65b1c3bbdce3b5090e3f08f321d624aed079a390572f757f32eba6)
+        version: 0.5.5(patch_hash=a0022ece9e5d2c2fb22961e52378ba21e4d33ed14a5fb6c03465a70138622382)
       mediabunny:
         specifier: ^1.40.1
         version: 1.56.2
@@ -5280,7 +5280,7 @@ snapshots:
       prelude-ls: 1.2.1
       type-check: 0.4.0
 
-  libavjs-webcodecs-polyfill@0.5.5(patch_hash=576303f31b65b1c3bbdce3b5090e3f08f321d624aed079a390572f757f32eba6):
+  libavjs-webcodecs-polyfill@0.5.5(patch_hash=a0022ece9e5d2c2fb22961e52378ba21e4d33ed14a5fb6c03465a70138622382):
     dependencies:
       '@libav.js/types': 6.10.9
       '@ungap/global-this': 0.4.4

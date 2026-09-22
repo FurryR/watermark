@@ -23,7 +23,12 @@ import {
   canEncodeVideo,
 } from "mediabunny";
 import type { VideoCodec } from "mediabunny";
-import { ensureWebCodecsPolyfill } from "./webCodecsPolyfill";
+import {
+  activateSoftwareWebCodecs,
+  ensureWebCodecsPolyfill,
+  isSoftwareWebCodecsActive,
+} from "./webCodecsPolyfill";
+import { isSoftwareDecodableVideoCodecString } from "./softwareCodecs";
 
 interface PixiTextureLike {
   uid?: number;
@@ -572,6 +577,41 @@ function createCanvasOutput(
 
 const codecProbeCache = new Map<string, VideoCodec>();
 
+/**
+ * 供软件编码回落到 libav polyfill 使用的 codec 字符串。libav polyfill 的 encoder()
+ * 只解析第一个 "." 之前的部分，因此具体 profile/level 仅作占位。
+ */
+const SOFTWARE_VIDEO_ENCODE_CODEC_STRINGS: Partial<Record<VideoCodec, string>> = {
+  avc: "avc1.640028",
+  vp9: "vp09.00.10.08",
+  vp8: "vp8",
+  av1: "av01.0.04M.08",
+};
+
+async function probeSoftwareVideoEncode(
+  codec: VideoCodec,
+  width: number,
+  height: number,
+  bitrate: number,
+): Promise<boolean> {
+  const codecString = SOFTWARE_VIDEO_ENCODE_CODEC_STRINGS[codec];
+  if (!codecString) {
+    return false;
+  }
+
+  const Encoder = (globalThis as { VideoEncoder?: typeof VideoEncoder }).VideoEncoder;
+  if (!Encoder || typeof Encoder.isConfigSupported !== "function") {
+    return false;
+  }
+
+  try {
+    const support = await Encoder.isConfigSupported({ codec: codecString, width, height, bitrate });
+    return support?.supported === true;
+  } catch {
+    return false;
+  }
+}
+
 async function pickMediabunnyVideoCodec(
   width: number,
   height: number,
@@ -588,6 +628,18 @@ async function pickMediabunnyVideoCodec(
     if (await canEncodeVideo(codec, { width, height, bitrate })) {
       codecProbeCache.set(cacheKey, codec);
       return codec;
+    }
+  }
+
+  // 原生 WebCodecs 没有任何可用编码器（例如 Firefox for Android 缺少 H.264 编码）。
+  // 此时自动回落到 libav.js 软件编码，而不是直接报错。
+  const softwareReady = isSoftwareWebCodecsActive() || (await activateSoftwareWebCodecs());
+  if (softwareReady) {
+    for (const codec of codecCandidates) {
+      if (await probeSoftwareVideoEncode(codec, width, height, bitrate)) {
+        codecProbeCache.set(cacheKey, codec);
+        return codec;
+      }
     }
   }
 
@@ -857,6 +909,31 @@ async function readVideoTrackStats(videoTrack: Awaited<ReturnType<Input["getPrim
   }
 }
 
+/**
+ * 探测视频轨道能否被解码。原生 WebCodecs 无法解码、但该编码在 libav 软件解码器
+ * 注册表内时，自动回落加载 polyfill 并重新探测。
+ */
+async function ensureVideoTrackDecodable(
+  videoTrack: Awaited<ReturnType<Input["getPrimaryVideoTrack"]>>,
+) {
+  if (!videoTrack) return;
+  if (await videoTrack.canDecode()) return;
+
+  if (isSoftwareWebCodecsActive()) {
+    throw new Error("当前浏览器无法解码该视频编码（软件解码亦不可用）");
+  }
+
+  const codecString = (await videoTrack.getCodecParameterString()) ?? "";
+  if (!isSoftwareDecodableVideoCodecString(codecString)) {
+    throw new Error("当前浏览器无法解码该视频编码");
+  }
+
+  const activated = await activateSoftwareWebCodecs();
+  if (!activated || !(await videoTrack.canDecode())) {
+    throw new Error("当前浏览器无法解码该视频编码（软件解码亦不可用）");
+  }
+}
+
 async function createMediaInput(
   file?: File,
   maxDurationMilliseconds?: number,
@@ -913,6 +990,12 @@ async function createMediaInput(
       inputFile.dispose();
       throw new Error("输入文件中没有可用的视频轨道");
     }
+
+    // 原生 WebCodecs 无法解码时，尝试回落到 libav 软件解码。
+    await ensureVideoTrackDecodable(primaryVideoTrack).catch((error) => {
+      inputFile.dispose();
+      throw error;
+    });
 
     const sourceWidth = Math.max(2, primaryVideoTrack.displayWidth || 1280);
     const sourceHeight = Math.max(2, primaryVideoTrack.displayHeight || 720);
